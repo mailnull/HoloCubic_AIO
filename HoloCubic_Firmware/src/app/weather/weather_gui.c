@@ -238,8 +238,8 @@ void display_weather(struct Weather weaInfo, lv_scr_load_anim_t anim_type)
                           weaInfo.minTemp, weaInfo.maxTmep, weaInfo.windDir, weaInfo.windLevel);
     lv_bar_set_value(tempBar, weaInfo.temperature+20, LV_ANIM_OFF);
     lv_label_set_text_fmt(tempLabel, "%2d°C", weaInfo.temperature);
-    // lv_bar_set_value(humiBar, weaInfo.humidity, LV_ANIM_OFF);
-    // lv_label_set_text_fmt(humiLabel, "%d\%", weaInfo.humidity);
+    lv_bar_set_value(humiBar, weaInfo.humidity, LV_ANIM_OFF);
+    lv_label_set_text_fmt(humiLabel, "%d%%", weaInfo.humidity);
 
     // // 绘制图形
     // lv_obj_align(weatherImg, NULL, LV_ALIGN_IN_TOP_RIGHT, -10, 10);

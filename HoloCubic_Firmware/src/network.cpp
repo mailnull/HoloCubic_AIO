@@ -23,6 +23,7 @@ Network::Network()
     m_preDisWifiConnInfoMillis = 0;
     WiFi.enableSTA(false);
     WiFi.enableAP(false);
+    isconnecting = false;
 }
 
 void Network::search_wifi(void)
@@ -58,17 +59,26 @@ boolean Network::start_conn_wifi(const char *ssid, const char *password)
         Serial.println(F("\nWiFi is OK.\n"));
         return false;
     }
-    Serial.println("");
-    Serial.print(F("Connecting: "));
-    Serial.print(ssid);
-    Serial.print(F(" @ "));
-    Serial.println(password);
-
-    //设置为STA模式并连接WIFI
-    WiFi.enableSTA(true);
-    // 修改主机名
-    WiFi.setHostname(HOST_NAME);
-    WiFi.begin(ssid, password);
+    
+    if(!isconnecting)
+    {
+        Serial.println("");
+        Serial.print(F("Connecting: "));
+        Serial.print(ssid);
+        Serial.print(F(" @ "));
+        Serial.println(password);
+        //设置为STA模式并连接WIFI
+        WiFi.enableSTA(true);
+        // 修改主机名
+        WiFi.setHostname(HOST_NAME);
+        int status = WiFi.begin(ssid, password);
+        // int status = WiFi.begin("ASUS", "");
+        if (status !=WL_CONNECT_FAILED) isconnecting = true;
+    }
+    if(WiFi.status() != WL_CONNECT_FAILED &&WiFi.status() != WL_CONNECTED)
+    {
+        Serial.print(".");
+    }
     m_preDisWifiConnInfoMillis = millis();
 
     // if (!WiFi.config(local_ip, gateway, subnet, dns))
@@ -103,6 +113,7 @@ boolean Network::end_conn_wifi(void)
         {
             // 这个if为了减少频繁的打印
             Serial.println(F("\nWiFi connect error.\n"));
+            isconnecting = false;
         }
         return CONN_ERROR;
     }
@@ -123,6 +134,7 @@ boolean Network::close_wifi(void)
     WiFi.enableSTA(false);
     WiFi.enableAP(false);
     WiFi.mode(WIFI_MODE_NULL);
+    isconnecting = false;
     // esp_wifi_set_inactive_time(ESP_IF_ETH, 10); //设置暂时休眠时间
     // esp_wifi_get_ant(wifi_ant_config_t * config);                   //获取暂时休眠时间
     // WiFi.setSleep(WIFI_PS_MIN_MODEM);

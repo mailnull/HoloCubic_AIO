@@ -12,6 +12,7 @@ struct Weather
     char cityname[10]; // 城市名
     int windLevel;
     int airQulity;
+    // char airTips[200];
 
     short daily_max[7];
     short daily_min[7];

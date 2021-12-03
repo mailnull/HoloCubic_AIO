@@ -21,7 +21,8 @@ struct FileManagerAppRunData
     boolean req_sent;                     // 标志是否发送wifi请求服务，0为关闭 1为开启
     unsigned long serverReflushPreMillis; // 上一回更新的时间
     uint8_t *recvBuf;                     // 接收数据缓冲区
-    uint8_t *sendBuf;                     // 发送数据缓冲区
+    uint8_t *sendBuf;  
+    int64_t wifi_alive_pre_send;                   // 发送数据缓冲区
 };
 
 static FileManagerAppRunData *run_data = NULL;
@@ -37,6 +38,7 @@ void file_maneger_init(void)
     // run_data->client = new WiFiClient();
     run_data->recvBuf = (uint8_t *)calloc(1, RECV_BUFFER_SIZE);
     run_data->sendBuf = (uint8_t *)calloc(1, SEND_BUFFER_SIZE);
+    run_data->wifi_alive_pre_send=0;
 }
 
 void file_maneger_process(AppController *sys,
@@ -67,7 +69,11 @@ void file_maneger_process(AppController *sys,
     {
         // return ;
         // 发送wifi维持的心跳
-        sys->req_event(&file_manager_app, APP_EVENT_WIFI_ALIVE, 0);
+        if(millis()-run_data->wifi_alive_pre_send>1000*2) //2s
+        {
+            sys->req_event(&file_manager_app, APP_EVENT_WIFI_ALIVE, 0);
+            run_data->wifi_alive_pre_send = millis();
+        }
 #if 1
         if (NULL != file_manager_client)
         {

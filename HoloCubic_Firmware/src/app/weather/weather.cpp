@@ -8,10 +8,15 @@
 #include <esp32-hal-timer.h>
 #include <map>
 
+#define WEATHER_NOW_API_DAY_300_TIMES "https://www.tianqiapi.com/api?version=v6&appid=%s&appsecret=%s&city=%s&unescape=1"
+
 #define WEATHER_NOW_API "https://www.tianqiapi.com/free/day?appid=%s&appsecret=%s&unescape=1&city=%s"   // &city=%s 
 #define WEATHER_DALIY_API "https://www.tianqiapi.com/free/week?unescape=1&appid=%s&appsecret=%s"
+
 #define TIME_API "http://api.m.taobao.com/rest/api3.do?api=mtop.common.getTimestamp"
 #define WEATHER_PAGE_SIZE 2
+
+#define USE_DAY_300_TIMES 1
 
 struct WeatherAppRunData
 {
@@ -40,9 +45,9 @@ enum wea_event_Id
 
 std::map<String, int> weatherMap = {{"qing", 0}, {"yin", 1}, {"yu", 2}, {"yun", 3}, {"bingbao", 4}, {"wu", 5}, {"shachen", 6}, {"lei", 7}, {"xue", 8}};
 
-static int windLevelAnalyse(String str)
+static uint8_t windLevelAnalyse(String str)
 {
-    int ret = 0;
+    uint8_t ret = 0;
     for (char ch : str)
     {
         if (ch >= '0' && ch <= '9')
@@ -61,7 +66,13 @@ static void getWeather(void)
     HTTPClient http;
     http.setTimeout(1000);
     char api[128] = "";
-    snprintf(api, 128, WEATHER_NOW_API, g_cfg.tianqi_appid, g_cfg.tianqi_appsecret, g_cfg.tianqi_addr);
+    snprintf(api, 128, 
+            #if USE_DAY_300_TIMES
+                WEATHER_NOW_API_DAY_300_TIMES,   
+            #else
+                WEATHER_NOW_API, 
+            #endif
+            g_cfg.tianqi_appid.c_str(), g_cfg.tianqi_appsecret.c_str(), g_cfg.tianqi_addr.c_str());
     http.begin(api);
 
     int httpCode = http.GET();
@@ -72,18 +83,42 @@ static void getWeather(void)
         {
             String payload = http.getString();
             Serial.println(payload);
+            #if USE_DAY_300_TIMES
             DynamicJsonDocument doc(1024);
+            #else
+            DynamicJsonDocument doc(512);
+            #endif
             deserializeJson(doc, payload);
-            JsonObject sk = doc.as<JsonObject>();
-            strcpy(run_data->wea.cityname, sk["city"].as<String>().c_str());
-            run_data->wea.weather_code = weatherMap[sk["wea_img"].as<String>()];
-            run_data->wea.temperature = sk["tem"].as<int>();
-            run_data->wea.humidity = 50;
-            run_data->wea.maxTmep = sk["tem_day"].as<int>();
-            run_data->wea.minTemp = sk["tem_night"].as<int>();
-            strcpy(run_data->wea.windDir, sk["win"].as<String>().c_str());
-            run_data->wea.windLevel = windLevelAnalyse(sk["win_speed"].as<String>());
-            run_data->wea.airQulity = airQulityLevel(sk["air"].as<int>());
+            const char* errmsg = doc["errmsg"];
+            if(errmsg)
+            {
+                Serial.printf("\n[HTTP] GET... failed, error: %s\n",errmsg);
+            }
+            else
+            {   
+                JsonObject sk = doc.as<JsonObject>();
+                strcpy(run_data->wea.cityname, sk["city"].as<String>().c_str());
+                run_data->wea.weather_code = weatherMap[sk["wea_img"].as<String>()];
+                run_data->wea.temperature = sk["tem"].as<int>();
+                #if (USE_DAY_300_TIMES ==1)
+                String humidity = sk["humidity"].as<String>(); 
+                humidity = humidity.substring(0,humidity.length()-1);
+                Serial.printf("hum:%s,humInt:%d\n",humidity,humidity.toInt());
+                // Serial.println(humidity);
+                run_data->wea.humidity = humidity.toInt();
+                run_data->wea.maxTmep = sk["tem1"].as<int>();
+                run_data->wea.minTemp = sk["tem2"].as<int>();
+                // Serial.println(sk["air_tips"].as<String>());
+                // strcpy(run_data->wea.airTips,sk["air_tips"].as<String>().substring(30).c_str());
+                #else
+                run_data->wea.humidity = 50;
+                run_data->wea.maxTmep = sk["tem_day"].as<int>();
+                run_data->wea.minTemp = sk["tem_night"].as<int>();
+                #endif
+                strcpy(run_data->wea.windDir, sk["win"].as<String>().c_str());
+                run_data->wea.windLevel = windLevelAnalyse(sk["win_speed"].as<String>());
+                run_data->wea.airQulity = airQulityLevel(sk["air"].as<int>());
+            }
         }
     }
     else
@@ -145,7 +180,7 @@ static void getDaliyWeather(short maxT[], short minT[])
     HTTPClient http;
     http.setTimeout(1000);
     char api[128] = "";
-    snprintf(api, 128, WEATHER_DALIY_API, g_cfg.tianqi_appid, g_cfg.tianqi_appsecret);
+    snprintf(api, 128, WEATHER_DALIY_API, g_cfg.tianqi_appid.c_str(), g_cfg.tianqi_appsecret.c_str());
     http.begin(api);
 
     int httpCode = http.GET();
@@ -156,13 +191,18 @@ static void getDaliyWeather(short maxT[], short minT[])
         {
             String payload = http.getString();
             Serial.println(payload);
-            DynamicJsonDocument doc(2048);
+            DynamicJsonDocument doc(1536);
             deserializeJson(doc, payload);
-            JsonObject sk = doc.as<JsonObject>();
-            for (int gDW_i = 0; gDW_i < 7; ++gDW_i)
-            {
-                maxT[gDW_i] = sk["data"][gDW_i]["tem_day"].as<int>();
-                minT[gDW_i] = sk["data"][gDW_i]["tem_night"].as<int>();
+            const char* errmsg = doc["errmsg"];
+            if(errmsg){
+                Serial.printf("[HTTP] GET... failed, error: %s\n",errmsg);
+            }else{
+                JsonObject sk = doc.as<JsonObject>();
+                for (int gDW_i = 0; gDW_i < 7; ++gDW_i)
+                {
+                    maxT[gDW_i] = sk["data"][gDW_i]["tem_day"].as<int>();
+                    minT[gDW_i] = sk["data"][gDW_i]["tem_night"].as<int>();
+                }
             }
         }
     }
